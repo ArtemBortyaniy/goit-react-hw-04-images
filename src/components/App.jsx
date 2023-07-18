@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import { useState, useEffect } from 'react';
 import { pixabayApi } from 'services/pixabayApi';
 import { toast } from 'react-toastify';
 import { ToastContainer } from 'react-toastify';
@@ -16,87 +16,74 @@ const Status = {
   REJECTED: 'rejected',
 };
 
-export class App extends Component {
-  state = {
-    serchQuery: '',
-    data: null,
-    error: null,
-    status: Status.IDLE,
-    page: 1,
-    quantityPage: 1,
-  };
+export function App() {
+  const [serchQuery, setSerchQuery] = useState('');
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [status, setStatus] = useState(Status.IDLE);
+  const [page, setPage] = useState(1);
+  const [quantityPage, setQuantityPage] = useState(1);
 
-  componentDidUpdate(prevProps, prevState) {
-    const { page } = this.state;
-
-    const previousStateQ = prevState.serchQuery;
-    const nextStateQ = this.state.serchQuery;
-
-    const previousPage = prevState.page;
-    const nextPage = this.state.page;
-
-    if (previousStateQ !== nextStateQ || previousPage !== nextPage) {
-      this.setState({ status: Status.PENDING });
-
-      pixabayApi(nextStateQ, page)
-        .then(data => {
-          if (data.hits.length > 0) {
-            toast.success('Wow so easy!');
-          }
-          if (data.hits.length === 0) {
-            toast.warning('Write valid parameter');
-          }
-
-          this.setState({
-            quantityPage: this.handleToFixed(data.totalHits),
-            data: data.hits,
-            status: Status.RESOLVED,
-          });
-        })
-        .catch(error => this.setState({ error, status: Status.REJECTED }));
+  useEffect(() => {
+    if (!serchQuery) {
+      return;
     }
-  }
+    setStatus(Status.PENDING);
+    pixabayApi(serchQuery, page)
+      .then(data => {
+        if (data.hits.length > 0) {
+          toast.success('Wow so easy!');
+        }
+        if (data.hits.length === 0) {
+          toast.warning('Write valid parameter');
+        }
+        setQuantityPage(handleToFixed(data.totalHits));
+        setData(data.hits);
+        setStatus(Status.RESOLVED);
+      })
+      .catch(error => {
+        setError(error);
+        setStatus(Status.REJECTED);
+      });
+  }, [page, serchQuery]);
 
-  handleToFixed = value => {
+  const handleToFixed = value => {
     const total = value / 12;
     return Number(total.toFixed(0));
   };
 
-  handlePagination = option => {
-    this.setState(prevState => ({ page: prevState.page + option }));
+  const handlePagination = option => {
+    setPage(page + option);
   };
 
-  handleFormSubmit = queryParam => {
-    this.setState({ serchQuery: queryParam });
+  const handleFormSubmit = queryParam => {
+    setSerchQuery(queryParam);
+    setPage(1);
   };
 
-  render() {
-    const { page, data, error, status, quantityPage } = this.state;
+  return (
+    <div>
+      <Searchbar onSubmit={handleFormSubmit} />
+      <ToastContainer autoClose={3000} />
+      {status === Status.IDLE && <Idle></Idle>}
 
-    return (
-      <div>
-        <Searchbar onSubmit={this.handleFormSubmit} />
-        <ToastContainer autoClose={3000} />
-        {status === 'idle' && <Idle></Idle>}
+      {status === Status.PENDING && <Loader></Loader>}
 
-        {status === 'pending' && <Loader></Loader>}
+      {status === Status.RESOLVED && (
+        <>
+          <ImageGallery users={data} />
 
-        {status === 'resolved' && (
-          <>
-            <ImageGallery users={data} />
+          {data.length > 0 && (
+            <Button
+              page={page}
+              quantityPage={quantityPage}
+              onClick={handlePagination}
+            />
+          )}
+        </>
+      )}
 
-            {data.length > 0 && (
-              <Button
-                page={page}
-                quantityPage={quantityPage}
-                onClick={this.handlePagination}
-              />
-            )}
-          </>
-        )}
-
-        {status === 'rejected' && <GalleryErrorView error={error.message} />}
-      </div>
-    );
-  }
+      {status === Status.REJECTED && <GalleryErrorView error={error.message} />}
+    </div>
+  );
 }
